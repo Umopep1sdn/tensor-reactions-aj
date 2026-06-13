@@ -1,16 +1,12 @@
--- AJTest — draw-proof general reactions profile (CURRENT TensorReactions format).
--- Inherit this into your current general profile (or select it directly).
+-- AJTest v2 — draw showcase (CURRENT TensorReactions format).
+-- Inherit into your general profile (or select it).
 --
--- One OnUpdate reaction (eventType=12) that, throttled to every 4s, draws around YOU:
---   * center 3y circle (translucent white)
---   * 4 cardinal rings 10y out:  N = white(-Z),  E = red(+X),  S = green(+Z),  W = blue(-X)
--- Walk around at the SSS dummy (Kholusia, outside Eulmore) and confirm which ring is
--- actually North vs the in-game compass — that proves the world-coordinate mapping.
--- Console prints "[AJ] proof..." each redraw. Disable the profile when done.
---
--- Format mirrors real current profiles (Paradox / megaminx): data-wrapped reaction →
--- data-wrapped action (aType="Lua"), colors as 0xAARRGGBB. Draw calls are from the
--- authoritative Argus defs (TensorCore.getStaticDrawer + ShapeDrawer:addTimedCircle).
+-- One OnUpdate reaction (eventType=12), throttled + entity-attached = GPU-light:
+--   * Arrow from YOU -> your current target (auto-tracks both)
+--   * Pinpoint target marker: green inner circle + purple ring around it
+--   * Status-reactive: marker turns gold/orange while you are IN COMBAT
+--   * Countdown payoff: /countdown 5 -> expanding pulse of rings when it hits 0
+-- Colors are 0xAARRGGBB. doNotDetect=true so guide draws don't trip defensives.
 
 local tbl =
 {
@@ -25,7 +21,47 @@ local tbl =
 					data =
 					{
 						aType = "Lua",
-						actionLua = "if Argus == nil then self.used = true return end\nif data.ajtLast == nil or TimeSince(data.ajtLast) > 4000 then\n    data.ajtLast = Now()\n    local me = TensorCore.mGetPlayer()\n    if me and me.pos then\n        local dur = 4500\n        TensorCore.getStaticDrawer(0x80FFFFFF, 0.5):addTimedCircle(dur, me.pos.x, me.pos.y, me.pos.z, 3, 0, false, true)\n        TensorCore.getStaticDrawer(0xC0FFFFFF, 0.8):addTimedCircle(dur, me.pos.x, me.pos.y, me.pos.z - 10, 1.5, 0, false, true)\n        TensorCore.getStaticDrawer(0xC0FF0000, 0.8):addTimedCircle(dur, me.pos.x + 10, me.pos.y, me.pos.z, 1.5, 0, false, true)\n        TensorCore.getStaticDrawer(0xC000FF00, 0.8):addTimedCircle(dur, me.pos.x, me.pos.y, me.pos.z + 10, 1.5, 0, false, true)\n        TensorCore.getStaticDrawer(0xC00000FF, 0.8):addTimedCircle(dur, me.pos.x - 10, me.pos.y, me.pos.z, 1.5, 0, false, true)\n        d(\"[AJ] proof: center + N=white(-Z) E=red(+X) S=green(+Z) W=blue(-X)\")\n    end\nend\nself.used = true",
+						actionLua = [[
+if Argus == nil then self.used = true return end
+local me = TensorCore.mGetPlayer()
+
+-- ===== Countdown payoff: expanding ring pulse when a /countdown reaches 0 =====
+local cd   = AnyoneCore and AnyoneCore.Data and AnyoneCore.Data.countdownTime
+local cdur = AnyoneCore and AnyoneCore.Data and AnyoneCore.Data.countdownDuration
+if cd and cdur and me then
+    local remaining = cdur * 1000 - TimeSince(cd)
+    if remaining <= 0 and not data.ajtCdFired then
+        data.ajtCdFired = true
+        for i = 1, 6 do
+            local col = (i % 2 == 0) and 0xB000E5FF or 0xB0FFFFFF
+            TensorCore.getStaticDrawer(col, 1.5):addTimedCircle(1000, me.pos.x, me.pos.y, me.pos.z, 1.5 + i * 2.5, i * 110, false, true)
+        end
+        d("[AJ] COUNTDOWN GO!")
+    end
+elseif data.ajtCdFired then
+    data.ajtCdFired = nil   -- reset for next countdown
+end
+
+-- ===== Target arrow + pinpoint marker (throttled; attached draws track entities) =====
+if data.ajtLast == nil or TimeSince(data.ajtLast) > 1800 then
+    data.ajtLast = Now()
+    local tg = TensorCore.mGetTarget()
+    local dur = 2100
+    local incombat = (InCombat and InCombat()) or false
+    if me then
+        TensorCore.getStaticDrawer(0x60FFFFFF, 0.5):addTimedCircleOnEnt(dur, me.id, 1, 0, false, true)
+    end
+    if me and tg and tg.pos then
+        -- arrow from you -> target
+        TensorCore.getStaticDrawer(0xE000E5FF, 1.0):addTimedArrowOnEnt(dur, me.id, 2.5, 1.2, 1.5, 2.4, tg.id, 0, false, 0, false)
+        -- pinpoint marker: inner circle + outer ring (gold/orange in combat, green/purple otherwise)
+        local inner = incombat and 0xC0FFD000 or 0xC000FF00
+        local ring  = incombat and 0xC0FF6000 or 0xC0A020F0
+        TensorCore.getStaticDrawer(inner, 0.5):addTimedCircleOnEnt(dur, tg.id, 1.2, 0, false, true)
+        TensorCore.getStaticDrawer(ring, 1.2):addTimedDonutOnEnt(dur, tg.id, 1.6, 2.4, 0, false, true)
+    end
+end
+self.used = true]],
 						endIfUsed = true,
 						uuid = "a17e5701-0001-4000-8000-0000000000a1",
 						version = 2.1,
@@ -36,7 +72,7 @@ local tbl =
 			{
 			},
 			eventType = 12,
-			name = "[AJ] Draw Proof (OnUpdate)",
+			name = "[AJ] Showcase (arrow/target/status/countdown)",
 			uuid = "a17e5701-0002-4000-8000-0000000000a2",
 			version = 2,
 		},
