@@ -21,32 +21,43 @@ local tbl =
 if Argus == nil then self.used = true return end
 local FIRE  = {1600, 5547}   -- Entropy
 local WATER = {1601, 5548}   -- Dynamic Fluid
-local party = TensorCore.getEntityByGroup("Party", "Number") or {}
+local cands = {}
+local me = TensorCore.mGetPlayer(); if me then cands[#cands+1] = me end
+for _, q in pairs(TensorCore.getEntityByGroup("Party", "Number") or {}) do if q then cands[#cands+1] = q end end
 local function find(ids)
-    for _, p in pairs(party) do
-        if p then
-            for _, id in ipairs(ids) do
-                local b = TensorCore.getBuff(p, id)
-                if b then return p, id, b.duration end
-            end
+    for _, ent in ipairs(cands) do
+        for _, id in ipairs(ids) do
+            local b = TensorCore.getBuff(ent, id)
+            if b then return id, b.duration end
         end
     end
 end
-local fp, fid, fdur = find(FIRE)
-local wp, wid, wdur = find(WATER)
-if (fp or wp) and (data.dmuDiagLast == nil or TimeSince(data.dmuDiagLast) > 3000) then
+local fid, fdur = find(FIRE)
+local wid, wdur = find(WATER)
+if (fid or wid) and (data.dmuDiagLast == nil or TimeSince(data.dmuDiagLast) > 2500) then
     data.dmuDiagLast = Now()
     d("[DMU DIAG] Entropy(fire) id="..tostring(fid).." dur="..tostring(fdur).." | DynamicFluid(water) id="..tostring(wid).." dur="..tostring(wdur))
-    local fx = Argus.getCurrentMapEffects()
-    d("[DMU DIAG] mapeffects="..tostring(fx and #fx or 0))
-    for i, e in ipairs(fx or {}) do
-        local ri = e.resource_info
-        if ri then
-            local px = ri.position and ri.position.x
-            local pz = ri.position and ri.position.z
-            d("[DMU DIAG] fx"..i.." id="..tostring(ri.id).." type="..tostring(ri.type).." path="..tostring(ri.path).." @"..tostring(px)..","..tostring(pz))
+    -- 1) map effects + their subresources
+    local fx = Argus.getCurrentMapEffects() or {}
+    d("[DMU DIAG] mapeffects="..tostring(#fx))
+    for i, e in ipairs(fx) do
+        local ri = e.resource_info or {}
+        local p = ri.position or {}
+        d("[DMU DIAG] fx"..i.." type="..tostring(ri.type).." path="..tostring(ri.path).." @"..tostring(p.x)..","..tostring(p.z))
+        local subs = ri.subresources
+        if type(subs) == "table" then
+            for j, s in ipairs(subs) do
+                local sri = s.resource_info or {}
+                local sp = sri.position or {}
+                d("[DMU DIAG]   sub"..j.." type="..tostring(sri.type).." path="..tostring(sri.path).." @"..tostring(sp.x)..","..tostring(sp.z))
+            end
         end
     end
+    -- 2) active AOEs (crystal donut/spread telegraphs carry positions)
+    local gaoe = Argus.getCurrentGroundAOEs and (Argus.getCurrentGroundAOEs(true) or {}) or {}
+    for i, a in ipairs(gaoe) do d("[DMU DIAG] gAOE"..i.." name="..tostring(a.aoeName).." id="..tostring(a.aoeID).." @"..tostring(a.x)..","..tostring(a.z)) end
+    local daoe = Argus.getCurrentDirectionalAOEs and (Argus.getCurrentDirectionalAOEs() or {}) or {}
+    for k, a in pairs(daoe) do d("[DMU DIAG] dAOE name="..tostring(a.aoeName).." id="..tostring(a.aoeID).." @"..tostring(a.x)..","..tostring(a.z).." h="..tostring(a.heading)) end
 end
 self.used = true]],
 						endIfUsed = true,
